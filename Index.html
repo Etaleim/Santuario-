@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>D&D - Il Santuario del Focolare (Multiplayer)</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: #0b0c10; color: #c5c6c7; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 8px; }
+    
+    h1 { font-family: 'Cinzel', serif; font-size: 1.1rem; margin-bottom: 4px; color: #d4af37; text-align: center; text-shadow: 0 2px 4px #000; }
+    
+    .compass { font-family: 'Cinzel', serif; font-weight: bold; color: #e74c3c; font-size: 0.9rem; margin-bottom: 4px; letter-spacing: 2px; }
+    .status-bar { margin-bottom: 6px; text-align: center; font-size: 0.8rem; color: #2ecc71; min-height: 1.2em; font-weight: bold; }
+
+    /* Selezione Pedina Giocatore */
+    .player-select-bar { display: flex; gap: 8px; margin-bottom: 8px; }
+    .btn-select-p {
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 2px solid #555;
+      background: #222;
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .btn-select-p.active-p1 { background: #e74c3c; border-color: #fff; }
+    .btn-select-p.active-p2 { background: #2ecc71; border-color: #fff; }
+    .btn-select-p.active-p3 { background: #9b59b6; border-color: #fff; }
+
+    #grid-container {
+      display: grid;
+      grid-template-columns: repeat(15, 1fr);
+      grid-template-rows: repeat(15, 1fr);
+      gap: 1px;
+      width: 92vw;
+      height: 92vw;
+      max-width: 420px;
+      max-height: 420px;
+      border: 3px solid #332211;
+      background-color: #1a1a1a;
+      box-shadow: 0 0 15px rgba(0,0,0,0.9);
+      border-radius: 4px;
+    }
+
+    .cell {
+      background-color: #242526;
+      border: 1px solid #1c1d1e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: min(3.2vw, 11px);
+      user-select: none;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cell.statue { background-color: #3a3d40; }
+    .cell.altar { background-color: #4a2c11; }
+    .cell.entrance { background-color: #1b2631; }
+    .cell.column { background-color: #2c2c2c; }
+    .cell.water { background-color: #1a365d; }
+    .cell.rubble { background-color: #2d241e; }
+    .cell.brazier { background-color: #4a1c1b; }
+    .cell.sarcophagus { background-color: #33302b; }
+    .cell.magic-circle { background-color: #2c1b4d; }
+    .cell.carpet { background-color: #3b1a24; }
+
+    .grid-blind .cell {
+      background-color: #050505 !important;
+      border-color: #0d0d0d !important;
+    }
+    .grid-blind .cell-content { display: none !important; }
+
+    .target-blue { background-color: #0077ff !important; box-shadow: 0 0 8px #00d2ff, inset 0 0 6px #ffffff; z-index: 2; }
+    
+    .player-token {
+      border-radius: 50%;
+      width: 80%;
+      height: 80%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+      font-size: min(2.5vw, 9px);
+      box-shadow: 0 0 4px #000;
+      z-index: 5;
+    }
+    .p1 { background-color: #e74c3c; }
+    .p2 { background-color: #2ecc71; }
+    .p3 { background-color: #9b59b6; }
+
+    .white-light {
+      width: 70%;
+      height: 70%;
+      border-radius: 50%;
+      background-color: #ffffff;
+      box-shadow: 0 0 8px #ffffff, 0 0 15px #ffffff;
+      z-index: 5;
+    }
+
+    .controls { margin-top: 10px; display: flex; flex-direction: column; align-items: center; width: 92vw; max-width: 420px; }
+    
+    .btn-wooden-plaque {
+      background: linear-gradient(180deg, #5c3a21 0%, #3d2310 100%);
+      color: #f1d39b;
+      font-family: 'Cinzel', serif;
+      font-size: 0.95rem;
+      font-weight: bold;
+      padding: 10px 16px;
+      border: 2px solid #8c5a32;
+      border-radius: 6px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 4px 8px rgba(0,0,0,0.7);
+      text-shadow: 1px 1px 2px #000;
+      cursor: pointer;
+      width: 100%;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .btn-wooden-plaque.blind-mode {
+      background: linear-gradient(180deg, #2c3e50 0%, #1a252f 100%);
+      color: #aeb6bf;
+      border-color: #4a6572;
+    }
+
+    #qrcode-modal { display: flex; flex-direction: column; align-items: center; background: #16181a; padding: 8px; border-radius: 6px; margin-top: 8px; border: 1px solid #333; }
+    #qrcode { background: white; padding: 4px; border-radius: 4px; }
+
+    #victory-screen {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(5, 10, 20, 0.96);
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      text-align: center;
+      padding: 20px;
+    }
+    #victory-screen h2 { font-family: 'Cinzel', serif; color: #00d2ff; font-size: 1.6rem; text-shadow: 0 0 15px #0077ff; margin-bottom: 15px; }
+    .fire-icon { font-size: 4rem; animation: flamePulse 1.2s infinite alternate; }
+    @keyframes flamePulse { from { transform: scale(0.95); filter: drop-shadow(0 0 10px #0077ff); } to { transform: scale(1.15); filter: drop-shadow(0 0 25px #00d2ff); } }
+  </style>
+</head>
+<body>
+
+  <h1>SANTUARIO DEL FOCOLARE</h1>
+  <div class="compass">▲ NORD</div>
+  <div class="status-bar" id="status-text">Connessione a Firebase...</div>
+
+  <div class="player-select-bar">
+    <button class="btn-select-p active-p1" id="btn-p1" onclick="selectMyPlayer(1)">Muovi P1 (Rosso)</button>
+    <button class="btn-select-p" id="btn-p2" onclick="selectMyPlayer(2)">Muovi P2 (Verde)</button>
+    <button class="btn-select-p" id="btn-p3" onclick="selectMyPlayer(3)">Muovi P3 (Viola)</button>
+  </div>
+
+  <div id="grid-container"></div>
+
+  <div class="controls">
+    <button class="btn-wooden-plaque" id="eye-btn" onclick="toggleEyes()">📜 Chiudi gli Occhi</button>
+  </div>
+
+  <div id="qrcode-modal">
+    <p style="font-size: 0.7rem; margin-bottom: 4px; color: #888;">Inquadra per unirti al tavolo:</p>
+    <div id="qrcode"></div>
+  </div>
+
+  <div id="victory-screen">
+    <div class="fire-icon">🔥</div>
+    <h2>FOCOLARE MAGICO ATTIVATO!</h2>
+    <p style="color: #d1f2a5; max-width: 300px; line-height: 1.4; font-size: 0.9rem;">
+      Le tre luci si fondono in una fiammata azzurra che divampa sull'altare antico. L'enigma è superato!
+    </p>
+  </div>
+
+  <script>
+    // Configurazione Firebase personale
+    const firebaseConfig = {
+      apiKey: "AIzaSyBjBkrrP1I48ydiU28e87UbMJWMmVY6GxU",
+      authDomain: "enigma-dnd.firebaseapp.com",
+      databaseURL: "https://enigma-dnd-default-rtdb.firebaseio.com",
+      projectId: "enigma-dnd",
+      storageBucket: "enigma-dnd.firebasestorage.app",
+      messagingSenderId: "647076291086",
+      appId: "1:647076291086:web:90b56e6922a7ec5033925f",
+      measurementId: "G-NLQ1E9NTTM"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database().ref('santuario_sessione_dnd');
+
+    const GRID_SIZE = 15;
+    let myPlayerId = 1;
+
+    const MAP_LAYOUT = [
+      ['F','F','F','F','F','F','F','F','F','F','F','F','F','F','F'],
+      ['F','F','F','F','B','F','F','F','F','F','B','F','F','F','F'],
+      ['F','S','F','F','F','A','A','A','A','A','F','F','F','S','F'],
+      ['F','F','F','F','F','F','T','T','T','F','F','F','F','F','F'],
+      ['F','S','F','C','F','F','T','T','T','F','F','C','F','S','F'],
+      ['F','F','F','F','F','F','T','T','T','F','F','F','F','F','F'],
+      ['F','S','F','F','F','F','T','M','T','F','F','F','F','S','F'],
+      ['F','F','F','K','K','F','T','T','T','F','F','W','W','F','F'],
+      ['F','S','F','F','F','F','T','T','T','F','F','W','W','S','F'],
+      ['F','F','F','R','R','F','F','T','F','F','F','F','F','F','F'],
+      ['F','S','F','F','F','F','C','T','C','F','F','F','F','S','F'],
+      ['F','F','F','F','F','F','F','T','F','F','F','F','F','F','F'],
+      ['F','F','F','B','F','F','F','T','F','F','F','B','F','F','F'],
+      ['F','F','F','F','F','F','F','T','F','F','F','F','F','F','F'],
+      ['F','F','F','F','F','E','E','E','E','E','F','F','F','F','F']
+    ];
+
+    const WALKABLE_TYPES = ['F', 'T', 'M', 'E'];
+
+    let gameState = {
+      eyesClosed: false,
+      players: [
+        { id: 1, name: 'P1', x: 6, y: 13 },
+        { id: 2, name: 'P2', x: 7, y: 13 },
+        { id: 3, name: 'P3', x: 8, y: 13 }
+      ],
+      targets: []
+    };
+
+    function generateTargets() {
+      let newTargets = [];
+      while (newTargets.length < 3) {
+        let rx = Math.floor(Math.random() * GRID_SIZE);
+        let ry = Math.floor(Math.random() * GRID_SIZE);
+        if (WALKABLE_TYPES.includes(MAP_LAYOUT[ry][rx]) && !newTargets.some(t => t.x === rx && t.y === ry)) {
+          newTargets.push({ x: rx, y: ry });
+        }
+      }
+      return newTargets;
+    }
+
+    function syncToCloud() {
+      db.set(gameState);
+    }
+
+    db.on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        gameState = data;
+        document.getElementById('status-text').innerText = "🟢 Connesso al tavolo da gioco!";
+        updateUI();
+      } else {
+        gameState.targets = generateTargets();
+        syncToCloud();
+      }
+    });
+
+    function selectMyPlayer(id) {
+      myPlayerId = id;
+      document.getElementById('btn-p1').className = 'btn-select-p' + (id === 1 ? ' active-p1' : '');
+      document.getElementById('btn-p2').className = 'btn-select-p' + (id === 2 ? ' active-p2' : '');
+      document.getElementById('btn-p3').className = 'btn-select-p' + (id === 3 ? ' active-p3' : '');
+    }
+
+    function createGrid() {
+      const container = document.getElementById('grid-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (gameState.eyesClosed) {
+        container.classList.add('grid-blind');
+      } else {
+        container.classList.remove('grid-blind');
+      }
+
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const cell = document.createElement('div');
+          cell.classList.add('cell');
+          
+          const type = MAP_LAYOUT[y][x];
+
+          if (type === 'S') cell.classList.add('statue');
+          else if (type === 'A') cell.classList.add('altar');
+          else if (type === 'E') cell.classList.add('entrance');
+          else if (type === 'C') cell.classList.add('column');
+          else if (type === 'W') cell.classList.add('water');
+          else if (type === 'R') cell.classList.add('rubble');
+          else if (type === 'B') cell.classList.add('brazier');
+          else if (type === 'K') cell.classList.add('sarcophagus');
+          else if (type === 'M') cell.classList.add('magic-circle');
+          else if (type === 'T') cell.classList.add('carpet');
+
+          const content = document.createElement('span');
+          content.classList.add('cell-content');
+          if (type === 'S') content.innerText = '🗿';
+          else if (type === 'A') content.innerText = '🕯️';
+          else if (type === 'E') content.innerText = '🚪';
+          else if (type === 'C') content.innerText = '🏛️';
+          else if (type === 'W') content.innerText = '💧';
+          else if (type === 'R') content.innerText = '🪨';
+          else if (type === 'B') content.innerText = '🔥';
+          else if (type === 'K') content.innerText = '🪦';
+          else if (type === 'M') content.innerText = '🔮';
+          
+          cell.appendChild(content);
+
+          if (gameState.eyesClosed) {
+            if (gameState.targets && gameState.targets.some(t => t.x === x && t.y === y)) {
+              cell.classList.add('target-blue');
+            }
+            if (gameState.players.some(p => p.x === x && p.y === y)) {
+              const light = document.createElement('div');
+              light.classList.add('white-light');
+              cell.appendChild(light);
+            }
+          } else {
+            let p = gameState.players.find(p => p.x === x && p.y === y);
+            if (p) {
+              const token = document.createElement('div');
+              token.classList.add('player-token', `p${p.id}`);
+              token.innerText = p.name;
+              cell.appendChild(token);
+            }
+          }
+
+          cell.onclick = () => {
+            if (!gameState.eyesClosed && !WALKABLE_TYPES.includes(type)) return;
+            movePlayer(myPlayerId, x, y);
+          };
+
+          container.appendChild(cell);
+        }
+      }
+      checkWinCondition();
+    }
+
+    function updateUI() {
+      const btn = document.getElementById('eye-btn');
+
+      if (gameState.eyesClosed) {
+        btn.innerText = "👁️ Apri gli Occhi";
+        btn.classList.add('blind-mode');
+      } else {
+        btn.innerText = "📜 Chiudi gli Occhi";
+        btn.classList.remove('blind-mode');
+      }
+      createGrid();
+    }
+
+    function toggleEyes() {
+      gameState.eyesClosed = !gameState.eyesClosed;
+      if (!gameState.eyesClosed) {
+        gameState.targets = generateTargets();
+      }
+      syncToCloud();
+    }
+
+    function movePlayer(id, x, y) {
+      let p = gameState.players.find(p => p.id === id);
+      if (p) {
+        p.x = x;
+        p.y = y;
+        syncToCloud();
+      }
+    }
+
+    function checkWinCondition() {
+      let matched = 0;
+      if (gameState.targets) {
+        gameState.targets.forEach(t => {
+          if (gameState.players.some(p => p.x === t.x && p.y === t.y)) {
+            matched++;
+          }
+        });
+      }
+
+      if (matched === 3) {
+        document.getElementById('victory-screen').style.display = 'flex';
+      } else {
+        document.getElementById('victory-screen').style.display = 'none';
+      }
+    }
+
+    window.onload = () => {
+      try {
+        if (typeof QRCode !== 'undefined') {
+          new QRCode(document.getElementById("qrcode"), {
+            text: window.location.href,
+            width: 80,
+            height: 80
+          });
+        }
+      } catch (e) { console.log(e); }
+    };
+  </script>
+</body>
+</html>
