@@ -75,6 +75,7 @@
     .cell.magic-circle { background-color: #2c1b4d; }
     .cell.carpet { background-color: #3b1a24; }
 
+    /* Modalità BUIO sul singolo dispositivo */
     .grid-blind .cell {
       background-color: #050505 !important;
       border-color: #0d0d0d !important;
@@ -186,7 +187,7 @@
   </div>
 
   <script>
-    // Configurazione Firebase personale
+    // Configurazione Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyBjBkrrP1I48ydiU28e87UbMJWMmVY6GxU",
       authDomain: "enigma-dnd.firebaseapp.com",
@@ -202,6 +203,9 @@
     const db = firebase.database().ref('santuario_sessione_dnd');
 
     const GRID_SIZE = 15;
+    
+    // STATO LOCALE (non inviato al cloud):
+    let localEyesClosed = false;
     let myPlayerId = 1;
 
     const MAP_LAYOUT = [
@@ -224,8 +228,8 @@
 
     const WALKABLE_TYPES = ['F', 'T', 'M', 'E'];
 
+    // STATO CONDIVISO SU FIREBASE (Sincronizzato fra tutti)
     let gameState = {
-      eyesClosed: false,
       players: [
         { id: 1, name: 'P1', x: 6, y: 13 },
         { id: 2, name: 'P2', x: 7, y: 13 },
@@ -250,6 +254,7 @@
       db.set(gameState);
     }
 
+    // Ascolta i cambiamenti in tempo reale dal database
     db.on('value', (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -274,7 +279,8 @@
       if (!container) return;
       container.innerHTML = '';
 
-      if (gameState.eyesClosed) {
+      // Applica il buio solo se QUESTO specifico telefono ha gli occhi chiusi
+      if (localEyesClosed) {
         container.classList.add('grid-blind');
       } else {
         container.classList.remove('grid-blind');
@@ -312,16 +318,19 @@
           
           cell.appendChild(content);
 
-          if (gameState.eyesClosed) {
+          if (localEyesClosed) {
+            // Mostra le caselle bersaglio blu
             if (gameState.targets && gameState.targets.some(t => t.x === x && t.y === y)) {
               cell.classList.add('target-blue');
             }
+            // Mostra i bagliori bianchi delle pedine
             if (gameState.players.some(p => p.x === x && p.y === y)) {
               const light = document.createElement('div');
               light.classList.add('white-light');
               cell.appendChild(light);
             }
           } else {
+            // Mostra le pedine normali
             let p = gameState.players.find(p => p.x === x && p.y === y);
             if (p) {
               const token = document.createElement('div');
@@ -332,7 +341,7 @@
           }
 
           cell.onclick = () => {
-            if (!gameState.eyesClosed && !WALKABLE_TYPES.includes(type)) return;
+            if (!localEyesClosed && !WALKABLE_TYPES.includes(type)) return;
             movePlayer(myPlayerId, x, y);
           };
 
@@ -345,7 +354,7 @@
     function updateUI() {
       const btn = document.getElementById('eye-btn');
 
-      if (gameState.eyesClosed) {
+      if (localEyesClosed) {
         btn.innerText = "👁️ Apri gli Occhi";
         btn.classList.add('blind-mode');
       } else {
@@ -355,12 +364,10 @@
       createGrid();
     }
 
+    // TOGGLE ESCLUSIVAMENTE LOCALE
     function toggleEyes() {
-      gameState.eyesClosed = !gameState.eyesClosed;
-      if (!gameState.eyesClosed) {
-        gameState.targets = generateTargets();
-      }
-      syncToCloud();
+      localEyesClosed = !localEyesClosed;
+      updateUI();
     }
 
     function movePlayer(id, x, y) {
@@ -368,7 +375,7 @@
       if (p) {
         p.x = x;
         p.y = y;
-        syncToCloud();
+        syncToCloud(); // Sincronizza solo il movimento delle pedine
       }
     }
 
